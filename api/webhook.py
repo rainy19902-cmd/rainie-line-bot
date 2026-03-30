@@ -8,17 +8,18 @@ import google.generativeai as genai
 
 app = Flask(__name__)
 
-# 設定金鑰
+# 讀取金鑰
 line_bot_api = LineBotApi(os.getenv('LINE_CHANNEL_ACCESS_TOKEN'))
 handler = WebhookHandler(os.getenv('LINE_CHANNEL_SECRET'))
 genai.configure(api_key=os.getenv('GOOGLE_API_KEY'))
-model = genai.GenerativeModel('gemini-pro')
 
-# 只要敲 /api/webhook 這個門，不論 GET 還是 POST 都會回應
+# 修正：使用 gemini-1.5-flash，這是目前免費版最穩定且功能最強的模型
+model = genai.GenerativeModel('gemini-1.5-flash')
+
 @app.route("/api/webhook", methods=['GET', 'POST'])
 def callback():
     if request.method == 'GET':
-        return "Hello, Rainie! Your Webhook is alive!"
+        return "Hello, Rainie! Little Raindrop is ready!"
 
     signature = request.headers.get('X-Line-Signature')
     body = request.get_data(as_text=True)
@@ -40,13 +41,26 @@ def callback():
 def handle_message(event):
     user_text = event.message.text
     try:
-        prompt = f"你是房仲雨榛的智慧助手小雨滴，請用親切、專業、生活化的口吻回答：{user_text}"
-        response = model.generate_content(prompt)
-        reply_text = response.text if response.text else "小雨滴正在思考中，請稍後..."
-    except Exception as e:
-        reply_text = f"報告雨榛，小雨滴遇到一點問題：{str(e)}"
+        # 設定角色指令
+        prompt = f"你是房仲雨榛的智慧助手小雨滴，請用親切、專業、生活化的口吻回答客戶：{user_text}"
 
-    line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_text))
+        # 呼叫 Gemini
+        response = model.generate_content(prompt)
+
+        # 檢查回覆
+        if response and response.text:
+            reply_text = response.text
+        else:
+            reply_text = "小雨滴正在努力思考中，請稍後再試一次。"
+
+    except Exception as e:
+        # 如果出錯，回報錯誤原因
+        reply_text = f"報告雨榛，小雨滴遇到問題了：{str(e)}"
+
+    line_bot_api.reply_message(
+        event.reply_token, 
+        TextSendMessage(text=reply_text)
+    )
 
 if __name__ == "__main__":
     app.run()
