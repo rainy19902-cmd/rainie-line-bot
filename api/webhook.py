@@ -1,5 +1,6 @@
 import os
 import json
+import re
 from flask import Flask, request, abort
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
@@ -8,19 +9,19 @@ import google.generativeai as genai
 
 app = Flask(__name__)
 
-# 1. 讀取金鑰
+# 讀取金鑰
 line_bot_api = LineBotApi(os.getenv('LINE_CHANNEL_ACCESS_TOKEN'))
 handler = WebhookHandler(os.getenv('LINE_CHANNEL_SECRET'))
 genai.configure(api_key=os.getenv('GOOGLE_API_KEY'))
 model = genai.GenerativeModel('gemini-1.5-flash')
 
-# 2. 觸發關鍵字
-TRIGGER_WORDS = ["多少錢", "行情", "實價登錄", "成交價", "房價", "價格", "單價"]
+# 觸發關鍵字清單
+TRIGGER_WORDS = ["多少錢", "行情", "實價登錄", "成交價", "房價", "價格", "單價", "明細"]
 
 @app.route("/api/webhook", methods=['GET', 'POST'])
 def callback():
     if request.method == 'GET':
-        return "Little Raindrop is assisting Rainie!"
+        return "Little Raindrop 2.0 is helping Rainie!"
     signature = request.headers.get('X-Line-Signature')
     body = request.get_data(as_text=True)
     try:
@@ -33,35 +34,43 @@ def callback():
 def handle_message(event):
     user_text = event.message.text
 
-    # 關鍵字過濾
+    # 檢查是否觸發關鍵字
     should_trigger = any(word in user_text for word in TRIGGER_WORDS)
     if not should_trigger:
         return 
 
-    # 提取社區名稱
+    # 1. 精準提取社區名稱 (過濾掉所有雜質字)
     clean_name = user_text
     for word in TRIGGER_WORDS:
         clean_name = clean_name.replace(word, "")
-    clean_name = clean_name.replace("?", "").replace("？", "").replace("幫我找", "").strip()
+    # 過濾問號、空格、以及「幫我找、查」等動詞
+    clean_name = re.sub(r'[？?！!，。：\s]|幫我找|幫我查|我想看|查|看', '', clean_name).strip()
 
-    # 3. 強化指令：要求提供 7 個欄位的成交明細
+    # 2. 專業明細指令
     prompt = (
-        f"你是房仲雨榛的智慧助手小雨滴。客戶詢問：『{user_text}』，請執行以下任務：\n\n"
-        "1. 先用親切、擬人的語氣開頭，簡單分析該社區環境與未來潛力。\n"
-        "2. 【重要】請根據你的實價登錄大數據，列出該社區『近一年內』的成交明細（至少 3 筆）。\n"
-        "3. 每筆明細必須包含：📍地址(棟別)、格局、型態、車位有無、單價、總價、成交日期。\n"
-        "4. 結尾引導客戶：『數據只是參考，建議讓雨榛幫您現場看屋估算更準喔！』\n"
-        f"5. 最後附上正確的樂居連結：https://www.leju.com.tw/community_list?search_name={clean_name}\n\n"
-        "請開始親切的回報："
+        f"你是房仲雨榛的專業助理小雨滴。客戶詢問：『{user_text}』，請執行：\n\n"
+        f"1. 針對『{clean_name}』社區，先用親切的口吻打招呼並簡析周邊環境。\n"
+        "2. 列出該社區近一年內成交明細(2-3筆)。格式如下：\n"
+        "   📍地址(棟別)：\n"
+        "   格局/型態：\n"
+        "   車位有無：\n"
+        "   單價/總價：\n"
+        "   成交日期：\n"
+        "3. 最後說明數據僅供參考，引導找雨榛細算。\n"
+        f"4. 附上精準連結：https://www.leju.com.tw/community_list?search_name={clean_name}"
     )
 
     try:
         response = model.generate_content(prompt)
-        reply_text = response.text if response.text else "這區資料我正在整理中，我請雨榛等等親自回您喔！"
+        if response and response.text:
+            reply_text = response.text
+        else:
+            raise ValueError("Empty Response")
 
-    except Exception:
+    except Exception as e:
+        # 備援回覆：確保樂居網址也是乾淨的
         search_url = f"https://www.leju.com.tw/community_list?search_name={clean_name}"
-        reply_text = f"哈囉！這間社區的最新行情您可以先點這裡看喔：\n{search_url}\n詳細細節我請雨榛等等回覆您！"
+        reply_text = f"哈囉！小雨滴現在查資料有點擠，您可以先點這裡看最新行情：\n{search_url}\n詳細細節我請雨榛等等回覆您！"
 
     line_bot_api.reply_message(
         event.reply_token, 
