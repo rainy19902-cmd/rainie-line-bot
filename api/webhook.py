@@ -38,7 +38,7 @@ def callback():
 def handle_message(event):
     user_text = event.message.text
 
-    # 原則 1：檢查是否包含關鍵字，沒有的話就保持沈默 (人工回覆)
+    # 原則 1：檢查是否包含關鍵字，沒有的話就保持沈默 (人工回覆模式)
     should_trigger = any(word in user_text for word in TRIGGER_WORDS)
     if not should_trigger:
         return 
@@ -49,7 +49,7 @@ def handle_message(event):
             f"你是智慧助手小雨滴。請針對使用者的問題：『{user_text}』進行回答。\n\n"
             "規則如下：\n"
             "1. 必須親自上網查詢『樂居 (leju.com.tw)』或『內政部實價登錄』獲取最新精準資訊。\n"
-            "2. 說話要像真人、親切有禮貌且簡短，不要長篇大論，回答控制在 80 字以內。\n"
+            "2. 說話要像真人、親切有禮貌且簡短，不要長篇大論，回答控制在 100 字以內。\n"
             "3. 用白話文直接講單價範圍或總價趨勢，不要用 AI 的列點格式。\n"
             "4. 結尾要引導客戶找雨榛處理細節。例如：『這區行情大概是這樣，要不要我請雨榛幫妳細算一下？』\n"
             "5. 如果查不到，就說：『哎呀這社區太神祕了，我幫妳標記一下，讓雨榛等下親自回妳喔！』"
@@ -58,7 +58,7 @@ def handle_message(event):
         response = model.generate_content(prompt)
         reply_text = response.text if response.text else "我請雨榛等等親自回妳喔！"
 
-    except Exception as e:
+    except Exception:
         # 發生錯誤時保持沈默，讓人工作業，避免客人看到錯誤碼
         return
 
