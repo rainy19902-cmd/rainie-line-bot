@@ -13,13 +13,24 @@ line_bot_api = LineBotApi(os.getenv('LINE_CHANNEL_ACCESS_TOKEN'))
 handler = WebhookHandler(os.getenv('LINE_CHANNEL_SECRET'))
 genai.configure(api_key=os.getenv('GOOGLE_API_KEY'))
 
-# 修正：使用完整的模型路徑，確保 v1 版本能精準辨識
-model = genai.GenerativeModel(model_name='models/gemini-1.5-flash')
+def get_best_model():
+    """自動尋找目前可用的模型"""
+    try:
+        available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+        # 優先順序：1.5-flash > 1.5-pro > gemini-pro
+        if 'models/gemini-1.5-flash' in available_models:
+            return genai.GenerativeModel('gemini-1.5-flash')
+        elif 'models/gemini-pro' in available_models:
+            return genai.GenerativeModel('gemini-pro')
+        elif available_models:
+            return genai.GenerativeModel(available_models[0].replace('models/', ''))
+    except Exception:
+        return genai.GenerativeModel('gemini-1.5-flash') # 保底
 
 @app.route("/api/webhook", methods=['GET', 'POST'])
 def callback():
     if request.method == 'GET':
-        return "Hello, Rainie! Little Raindrop is here!"
+        return "Hello, Rainie! Little Raindrop is searching for a brain..."
 
     signature = request.headers.get('X-Line-Signature')
     body = request.get_data(as_text=True)
@@ -41,21 +52,24 @@ def callback():
 def handle_message(event):
     user_text = event.message.text
     try:
-        # 設定角色指令
-        prompt = f"你是房仲雨榛的智慧助手小雨滴，請用親切、專業、生活化的口吻回答：{user_text}"
+        # 自動尋找可用的模型
+        model = get_best_model()
 
-        # 呼叫最新版 Gemini
+        prompt = f"你是房仲雨榛的智慧助手小雨滴，請用親切、專業、生活化的口吻回答：{user_text}"
         response = model.generate_content(prompt)
 
-        # 取得回覆
         if response and response.text:
             reply_text = response.text
         else:
-            reply_text = "小雨滴正在努力組織語言，請稍後再試一次。"
+            reply_text = "小雨滴正在努力思考中，請再試一次。"
 
     except Exception as e:
-        # 如果出錯，回報錯誤原因
-        reply_text = f"報告雨榛，小雨滴遇到問題了：{str(e)}"
+        # 獲取所有可用模型清單，方便 Debug
+        try:
+            model_list = [m.name for m in genai.list_models()]
+            reply_text = f"報告雨榛，小雨滴出錯了。\n錯誤：{str(e)}\n可用模型：{', '.join(model_list[:3])}"
+        except:
+            reply_text = f"報告雨榛，連線失敗：{str(e)}"
 
     line_bot_api.reply_message(
         event.reply_token, 
