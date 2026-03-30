@@ -12,7 +12,7 @@ app = Flask(__name__)
 line_bot_api = LineBotApi(os.getenv('LINE_CHANNEL_ACCESS_TOKEN'))
 handler = WebhookHandler(os.getenv('LINE_CHANNEL_SECRET'))
 genai.configure(api_key=os.getenv('GOOGLE_API_KEY'))
-model = genai.GenerativeModel('gemini-pro')
+model = genai.GenerativeModel('gemini-1.5-flash')
 
 @app.route("/", methods=['GET'])
 def hello():
@@ -38,7 +38,9 @@ def callback():
 def handle_message(event):
     user_text = event.message.text
     try:
-        response = model.generate_content(user_text)
+        response = # 讓它知道它是雨榛的助理小龍蝦
+prompt = f"你是房仲雨榛的房地產智慧助手小雨滴，請用親切、專業且生活化的口吻回答：{user_text}"
+response = model.generate_content(prompt)
         reply_text = response.text
     except Exception as e:
         reply_text = "抱歉，Gemini 腦袋有點累，請等我一下再試試。"
